@@ -71,3 +71,40 @@ class WeightedRoundRobinAlgorithm extends LoadBalancingAlgorithm {
         this.currentIndex = (this.currentIndex + 1) % availableServers.length;
         return server;
       }
+
+      this.currentIndex = (this.currentIndex + 1) % availableServers.length;
+    }
+  }
+}
+
+class LeastConnectionsAlgorithm extends LoadBalancingAlgorithm {
+  getNextServer(): Server | null {
+    const availableServers = this.servers.filter(s => s.isHealthy);
+    if (availableServers.length === 0) return null;
+    
+    return availableServers.reduce((prev, current) => {
+      return prev.metrics.activeConnections < current.metrics.activeConnections ? prev : current;
+    });
+  }
+}
+
+class IpHashAlgorithm extends LoadBalancingAlgorithm {
+  getNextServer(clientIp?: string): Server | null {
+    if (!clientIp) return null;
+    
+    const availableServers = this.servers.filter(s => s.isHealthy);
+    if (availableServers.length === 0) return null;
+    
+    const hash = this.hashCode(clientIp);
+    const index = Math.abs(hash) % availableServers.length;
+    
+    return availableServers[index];
+  }
+
+  private hashCode(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
