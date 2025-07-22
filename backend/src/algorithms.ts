@@ -108,3 +108,35 @@ class IpHashAlgorithm extends LoadBalancingAlgorithm {
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash;
     }
+    return hash;
+  }
+}
+
+class RandomAlgorithm extends LoadBalancingAlgorithm {
+  getNextServer(): Server | null {
+    const availableServers = this.servers.filter(s => s.isHealthy);
+    if (availableServers.length === 0) return null;
+    
+    const index = Math.floor(Math.random() * availableServers.length);
+    return availableServers[index];
+  }
+}
+
+function createLoadBalancer(algorithmType: string, servers: Server[], config: LoadBalancerConfig): LoadBalancingAlgorithm {
+  switch (algorithmType) {
+    case 'round-robin':
+      return new RoundRobinAlgorithm(servers, config);
+    case 'weighted-round-robin':
+      return new WeightedRoundRobinAlgorithm(servers, config);
+    case 'least-connections':
+      return new LeastConnectionsAlgorithm(servers, config);
+    case 'ip-hash':
+      return new IpHashAlgorithm(servers, config);
+    case 'random':
+      return new RandomAlgorithm(servers, config);
+    default:
+      throw new Error(`Unknown algorithm: ${algorithmType}`);
+  }
+}
+
+export { LoadBalancingAlgorithm, createLoadBalancer };
