@@ -194,3 +194,77 @@ class WebSocketServer {
           socket.emit('error', { message: 'Failed to update traffic' });
         }
       });
+
+      socket.on('add-server', (data: { name?: string; weight?: number; capacity?: number }) => {
+        try {
+          const weight = typeof data.weight === 'number' ? Math.max(1, Math.min(10, data.weight)) : 1;
+          const capacity = typeof data.capacity === 'number' ? Math.max(10, Math.min(1000, data.capacity)) : 100;
+          const server = createServer(data.name, weight, capacity);
+          this.simulator.addServer(server);
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling add-server:', err);
+          socket.emit('error', { message: 'Failed to add server' });
+        }
+      });
+
+      socket.on('remove-server', (data: { serverId: string }) => {
+        try {
+          if (!data?.serverId || typeof data.serverId !== 'string') {
+            socket.emit('error', { message: 'Invalid serverId' });
+            return;
+          }
+          this.simulator.removeServer(data.serverId);
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling remove-server:', err);
+          socket.emit('error', { message: 'Failed to remove server' });
+        }
+      });
+
+      socket.on('update-server', (data: { serverId: string; weight?: number; capacity?: number }) => {
+        try {
+          if (!data?.serverId || typeof data.serverId !== 'string') {
+            socket.emit('error', { message: 'Invalid serverId' });
+            return;
+          }
+          const servers = this.simulator.getServers().map(s => {
+            if (s.id === data.serverId) {
+              return {
+                ...s,
+                weight: typeof data.weight === 'number' ? Math.max(1, Math.min(10, data.weight)) : s.weight,
+                capacity: typeof data.capacity === 'number' ? Math.max(10, Math.min(1000, data.capacity)) : s.capacity
+              };
+            }
+            return s;
+          });
+          this.simulator.updateConfig({ servers });
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling update-server:', err);
+          socket.emit('error', { message: 'Failed to update server' });
+        }
+      });
+
+      socket.on('toggle-health', (data: { serverId: string }) => {
+        try {
+          if (!data?.serverId || typeof data.serverId !== 'string') {
+            socket.emit('error', { message: 'Invalid serverId' });
+            return;
+          }
+          this.simulator.toggleServerHealth(data.serverId);
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling toggle-health:', err);
+          socket.emit('error', { message: 'Failed to toggle server health' });
+        }
+      });
+
+      socket.on('start-simulation', () => {
+        try {
+          this.simulator.start();
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling start-simulation:', err);
+          socket.emit('error', { message: 'Failed to start simulation' });
+        }
