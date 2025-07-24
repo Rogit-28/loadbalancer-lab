@@ -268,3 +268,65 @@ class WebSocketServer {
           console.error('Error handling start-simulation:', err);
           socket.emit('error', { message: 'Failed to start simulation' });
         }
+      });
+
+      socket.on('stop-simulation', () => {
+        try {
+          this.simulator.stop();
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling stop-simulation:', err);
+          socket.emit('error', { message: 'Failed to stop simulation' });
+        }
+      });
+
+      socket.on('run-comparison', async (data: { algorithms?: string[]; requestCount?: number }) => {
+        try {
+          if (!data?.algorithms || !Array.isArray(data.algorithms) || data.algorithms.length < 2) {
+            socket.emit('error', { message: 'At least 2 algorithms required for comparison' });
+            return;
+          }
+
+          // Validate all provided algorithms
+          const validAlgorithms = data.algorithms.filter(a =>
+            VALID_ALGORITHMS.includes(a as ValidAlgorithm)
+          );
+          if (validAlgorithms.length < 2) {
+            socket.emit('error', { message: `Need at least 2 valid algorithms. Valid: ${VALID_ALGORITHMS.join(', ')}` });
+            return;
+          }
+
+          const requestCount = typeof data.requestCount === 'number'
+            ? Math.max(50, Math.min(5000, data.requestCount))
+            : 500;
+
+          const result = await this.simulator.runComparison(validAlgorithms, requestCount);
+          socket.emit('comparison-result', result);
+        } catch (err) {
+          console.error('Error handling run-comparison:', err);
+          socket.emit('error', { message: 'Failed to run comparison' });
+        }
+      });
+
+      // ─── Mode switching events ────────────────────────────────────
+
+      socket.on('get-mode', () => {
+        try {
+          socket.emit('mode-update', this.getModeStatus());
+        } catch (err) {
+          console.error('Error handling get-mode:', err);
+          socket.emit('error', { message: 'Failed to get mode' });
+        }
+      });
+
+      socket.on('switch-mode', (data: { mode: 'simulation' | 'live' }) => {
+        try {
+          if (!data?.mode || (data.mode !== 'simulation' && data.mode !== 'live')) {
+            socket.emit('error', { message: 'Invalid mode. Must be "simulation" or "live"' });
+            return;
+          }
+
+          if (data.mode === 'live' && !this.orchestrator) {
+            socket.emit('error', { message: 'Live mode is not available' });
+            return;
+          }
