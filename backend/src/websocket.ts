@@ -130,3 +130,67 @@ class WebSocketServer {
         workers: this.orchestrator.getWorkers(),
       });
     });
+
+    this.orchestrator.on('health-update', () => {
+      if (!this.orchestrator) return;
+      this.io.emit('live-workers-update', {
+        workers: this.orchestrator.getWorkers(),
+      });
+    });
+  }
+
+  private setupSocketHandlers(): void {
+    this.io.on('connection', (socket: Socket) => {
+      console.log('Client connected:', socket.id);
+
+      // ─── Simulation events (unchanged) ─────────────────────────────
+
+      socket.on('get-config', () => {
+        try {
+          socket.emit('config-update', {
+            algorithm: this.simulator.getStatus().algorithm,
+            servers: this.simulator.getServers(),
+            traffic: this.simulator.getStatus(),
+            metrics: this.simulator.getMetrics()
+          });
+          // Also send recent request log
+          socket.emit('request-log', this.simulator.getRequestLog().slice(-20));
+        } catch (err) {
+          console.error('Error handling get-config:', err);
+          socket.emit('error', { message: 'Failed to get config' });
+        }
+      });
+
+      socket.on('update-algorithm', (data: { algorithm: string }) => {
+        try {
+          if (!data || !VALID_ALGORITHMS.includes(data.algorithm as ValidAlgorithm)) {
+            socket.emit('error', { message: `Invalid algorithm: ${data?.algorithm}. Must be one of: ${VALID_ALGORITHMS.join(', ')}` });
+            return;
+          }
+          this.simulator.updateConfig({ algorithm: data.algorithm as ValidAlgorithm });
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling update-algorithm:', err);
+          socket.emit('error', { message: 'Failed to update algorithm' });
+        }
+      });
+
+      socket.on('update-traffic', (data: { rate?: number; pattern?: string; speed?: number }) => {
+        try {
+          const status = this.simulator.getStatus();
+          const rate = typeof data.rate === 'number' ? Math.max(1, Math.min(10000, data.rate)) : status.rate;
+          const speed = typeof data.speed === 'number' ? Math.max(0.1, Math.min(10, data.speed)) : status.speed;
+          const validPatterns = ['steady', 'burst', 'spike'];
+          const pattern = validPatterns.includes(data.pattern || '') 
+            ? data.pattern as 'steady' | 'burst' | 'spike' 
+            : status.pattern as 'steady' | 'burst' | 'spike';
+
+          this.simulator.updateConfig({
+            traffic: { rate, pattern, speed }
+          });
+          this.emitConfigUpdate();
+        } catch (err) {
+          console.error('Error handling update-traffic:', err);
+          socket.emit('error', { message: 'Failed to update traffic' });
+        }
+      });
