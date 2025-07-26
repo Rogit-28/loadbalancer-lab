@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --primary-50: 210 40% 98%;
+    --primary-100: 210 40% 96%;
+    --primary-200: 210 40% 93%;
+    --primary-300: 210 40% 88%;
+    --primary-400: 210 40% 80%;
+    --primary-500: 210 100% 65%;
+    --primary-600: 210 100% 55%;
+    --primary-700: 210 100% 45%;
+    --primary-800: 210 100% 35%;
+    --primary-900: 210 100% 25%;
+    --primary-950: 210 100% 15%;
+    
+    --surface-0: 222 32% 8%;
+    --surface-50: 222 32% 10%;
+    --surface-100: 222 32% 12%;
+    --surface-200: 222 32% 14%;
+    --surface-300: 222 32% 16%;
+    --surface-400: 222 32% 18%;
+    --surface-500: 222 32% 20%;
+    --surface-600: 222 32% 22%;
+    --surface-700: 222 32% 24%;
+    --surface-800: 222 32% 26%;
+    --surface-900: 222 32% 28%;
+    
+    --text-primary: 0 0% 95%;
+    --text-secondary: 0 0% 75%;
+    --text-tertiary: 0 0% 60%;
+    --text-dim: 0 0% 45%;
+    
+    --border-light: 222 32% 25%;
+    --border-medium: 222 32% 30%;
+    --border-heavy: 222 32% 35%;
+    
+    --success-500: 142 76% 45%;
+    --warning-500: 38 92% 50%;
+    --error-500: 0 84% 60%;
+    --info-500: 200 100% 60%;
+    
+    --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.02);
+    --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --shadow-xl: 0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+  
+  html, body, #root {
+    @apply h-full;
+    background-color: hsl(222, 32%, 10%);
+  }
+  
+  body {
+    color: hsl(0, 0%, 95%);
+    @apply antialiased;
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border;
+    background-color: hsl(222, 32%, 12%);
+    border-color: hsl(222, 32%, 25%);
+  }
+
+  .btn {
+    @apply inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors;
+  }
+
+  .btn-primary {
+    background-color: hsl(210, 100%, 55%);
+    @apply text-white;
+  }
+
+  .btn-primary:hover {
+    background-color: hsl(210, 100%, 45%);
+  }
+}
+
+@layer utilities {
+  .bg-surface-0 { background-color: hsl(var(--surface-0)); }
+  .bg-surface-50 { background-color: hsl(var(--surface-50)); }
+  .bg-surface-100 { background-color: hsl(var(--surface-100)); }
+  .bg-surface-200 { background-color: hsl(var(--surface-200)); }
+  .bg-surface-300 { background-color: hsl(var(--surface-300)); }
+  .bg-surface-400 { background-color: hsl(var(--surface-400)); }
+  .bg-surface-500 { background-color: hsl(var(--surface-500)); }
+  .bg-surface-600 { background-color: hsl(var(--surface-600)); }
+  .bg-surface-700 { background-color: hsl(var(--surface-700)); }
+  .bg-surface-800 { background-color: hsl(var(--surface-800)); }
+  .bg-surface-900 { background-color: hsl(var(--surface-900)); }
+  
+  .text-text-primary { color: hsl(var(--text-primary)); }
+  .text-text-secondary { color: hsl(var(--text-secondary)); }
+  .text-text-tertiary { color: hsl(var(--text-tertiary)); }
+  .text-text-dim { color: hsl(var(--text-dim)); }
+  
+  .border-border-light { border-color: hsl(var(--border-light)); }
+  .border-border-medium { border-color: hsl(var(--border-medium)); }
+  .border-border-heavy { border-color: hsl(var(--border-heavy)); }
+  
+  .text-primary-500 { color: hsl(var(--primary-500)); }
+  .text-primary-400 { color: hsl(var(--primary-400)); }
+  
+  .bg-primary-500 { background-color: hsl(var(--primary-500)); }
+  
+  .text-success { color: hsl(var(--success-500)); }
+  .text-warning { color: hsl(var(--warning-500)); }
+  .text-error { color: hsl(var(--error-500)); }
+  .text-info { color: hsl(var(--info-500)); }
+  
+  .text-secondary { color: hsl(var(--text-secondary)); }
+}
