@@ -31,3 +31,46 @@ interface LoadBalancerConfig {
   servers: Server[];
   traffic: TrafficConfig;
 }
+
+interface ServerMetrics {
+  requestRate: number;
+  avgResponseTime: number;
+  p50ResponseTime: number;
+  p95ResponseTime: number;
+  p99ResponseTime: number;
+  activeConnections: number;
+  cpuUtilization: number;
+  memoryUtilization: number;
+  errorRate: number;
+  requestDistribution: number;
+}
+
+interface SystemMetrics {
+  timestamp: number;
+  servers: {
+    [serverId: string]: ServerMetrics;
+  };
+  totalRequests: number;
+  totalErrors: number;
+  avgResponseTime: number;
+  /** System-wide percentiles aggregated from all servers' response times */
+  p50ResponseTime: number;
+  p95ResponseTime: number;
+  p99ResponseTime: number;
+  /** Aggregate requests per second across all servers */
+  throughput: number;
+  /** Total active connections across all servers */
+  activeConnections: number;
+}
+
+/** A single request log entry for the live activity feed */
+interface RequestLogEntry {
+  id: string;
+  timestamp: number;
+  clientIp: string;
+  serverName: string;
+  serverId: string;
+  responseTime: number;
+  success: boolean;
+  error?: string;
+}
