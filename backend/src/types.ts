@@ -181,3 +181,38 @@ interface LiveMetrics {
   activeConnections: number;
   throughput: number;
   workers: {
+    [workerId: string]: {
+      status: WorkerStatus;
+      health: HealthStatus;
+      circuitState: CircuitState;
+      requestCount: number;
+      errorCount: number;
+      avgResponseTime: number;
+      activeConnections: number;
+    };
+  };
+}
+
+interface LiveModeState {
+  mode: 'live';
+  config: LiveModeConfig;
+  isRunning: boolean;
+  workers: WorkerProcess[];
+  metrics: LiveMetrics | null;
+  circuitBreakers: CircuitBreakerState[];
+}
+
+interface ModeStatus {
+  currentMode: SystemMode;
+  isRunning: boolean;
+  canSwitch: boolean;
+}
+
+export {
+  Server, TrafficConfig, LoadBalancerConfig, ServerMetrics, SystemMetrics,
+  RequestLogEntry, AlgorithmComparisonResult, ComparisonResponse,
+  // Live mode types
+  SystemMode, LiveModeConfig, WorkerStatus, WorkerProcess,
+  HealthStatus, HealthCheckResult, ProxyRequest,
+  CircuitState, CircuitBreakerState, LiveMetrics, LiveModeState, ModeStatus
+};
