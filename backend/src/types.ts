@@ -112,3 +112,31 @@ interface LiveModeConfig {
     resetTimeout: number;
     halfOpenMaxRequests: number;
   };
+}
+
+type WorkerStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'errored';
+
+interface WorkerProcess {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  pid: number | null;
+  status: WorkerStatus;
+  weight: number;
+  capacity: number;
+  startedAt: number | null;
+  /** Cumulative uptime in ms (excludes downtime periods) */
+  uptime: number;
+}
+
+type HealthStatus = 'healthy' | 'unhealthy' | 'degraded' | 'unknown';
+
+interface HealthCheckResult {
+  workerId: string;
+  status: HealthStatus;
+  responseTime: number;
+  timestamp: number;
+  statusCode: number | null;
+  error?: string;
+}
