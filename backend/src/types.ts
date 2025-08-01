@@ -74,3 +74,41 @@ interface RequestLogEntry {
   success: boolean;
   error?: string;
 }
+
+/** Result for a single algorithm in a comparison run */
+interface AlgorithmComparisonResult {
+  algorithm: string;
+  totalRequests: number;
+  avgResponseTime: number;
+  p50ResponseTime: number;
+  p95ResponseTime: number;
+  p99ResponseTime: number;
+  errorRate: number;
+  /** Standard deviation of request distribution across servers (lower = fairer) */
+  distributionStdDev: number;
+  /** Per-server request counts for distribution visualization */
+  serverDistribution: { serverId: string; serverName: string; requests: number }[];
+}
+
+/** Full comparison response sent to the client */
+interface ComparisonResponse {
+  results: AlgorithmComparisonResult[];
+  requestsPerAlgorithm: number;
+  serverCount: number;
+  timestamp: number;
+}
+
+// ─── Live Mode Types ─────────────────────────────────────────────────────────
+
+type SystemMode = 'simulation' | 'live';
+
+interface LiveModeConfig {
+  proxyPort: number;
+  workerBasePort: number;
+  workerCount: number;
+  healthCheckInterval: number;
+  circuitBreaker: {
+    failureThreshold: number;
+    resetTimeout: number;
+    halfOpenMaxRequests: number;
+  };
