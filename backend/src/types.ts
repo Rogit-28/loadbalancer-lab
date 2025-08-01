@@ -140,3 +140,44 @@ interface HealthCheckResult {
   statusCode: number | null;
   error?: string;
 }
+
+interface ProxyRequest {
+  id: string;
+  method: string;
+  url: string;
+  clientIp: string;
+  targetWorkerId: string;
+  targetHost: string;
+  targetPort: number;
+  startTime: number;
+  endTime: number | null;
+  responseTime: number | null;
+  statusCode: number | null;
+  success: boolean;
+  error?: string;
+}
+
+type CircuitState = 'closed' | 'open' | 'half-open';
+
+interface CircuitBreakerState {
+  workerId: string;
+  state: CircuitState;
+  failureCount: number;
+  successCount: number;
+  lastFailureTime: number | null;
+  lastStateChange: number;
+  nextRetryTime: number | null;
+}
+
+interface LiveMetrics {
+  timestamp: number;
+  proxyPort: number;
+  totalProxiedRequests: number;
+  totalProxiedErrors: number;
+  avgProxyResponseTime: number;
+  p50ResponseTime: number;
+  p95ResponseTime: number;
+  p99ResponseTime: number;
+  activeConnections: number;
+  throughput: number;
+  workers: {
