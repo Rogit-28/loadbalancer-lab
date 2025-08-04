@@ -74,3 +74,87 @@ function createWorkerApp(workerId: string): express.Application {
     const p50 = percentile(sorted, 0.5);
     const p95 = percentile(sorted, 0.95);
     const p99 = percentile(sorted, 0.99);
+
+    res.json({
+      workerId,
+      uptime,
+      requestCount: metrics.requestCount,
+      errorCount: metrics.errorCount,
+      totalResponseTime: metrics.totalResponseTime,
+      avgResponseTime: getAvgResponseTime(),
+      p50ResponseTime: p50,
+      p95ResponseTime: p95,
+      p99ResponseTime: p99,
+      errorRate: metrics.requestCount > 0
+        ? Math.round((metrics.errorCount / metrics.requestCount) * 10000) / 100
+        : 0,
+    });
+  });
+
+  // Catch-all route: responds to ANY method on ANY path
+  app.all('*', (req: Request, res: Response) => {
+    const latency = calculateLatency();
+    const startTime = Date.now();
+
+    setTimeout(() => {
+      const responseTime = Date.now() - startTime;
+      metrics.requestCount++;
+      metrics.totalResponseTime += responseTime;
+      metrics.responseTimes.push(responseTime);
+
+      // Keep rolling window
+      if (metrics.responseTimes.length > RESPONSE_TIME_LIMIT) {
+        metrics.responseTimes = metrics.responseTimes.slice(-RESPONSE_TIME_LIMIT);
+      }
+
+      if (shouldSimulateError()) {
+        metrics.errorCount++;
+        logger.debug('Simulated error', { workerId, path: req.path });
+        res.status(503).json({
+          error: 'Service temporarily unavailable',
+          workerId,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      logger.debug('Request handled', { workerId, method: req.method, path: req.path, responseTime });
+      res.json({
+        message: 'OK',
+        workerId,
+        method: req.method,
+        path: req.path,
+        responseTime,
+        timestamp: Date.now(),
+      });
+    }, latency);
+  });
+
+  return app;
+}
+
+/** Start an HTTP server running the worker Express app on the given port. */
+function startWorkerServer(port: number, workerId: string): Promise<http.Server> {
+  const logger = createLogger('worker-server');
+  const app = createWorkerApp(workerId);
+
+  return new Promise<http.Server>((resolve, reject) => {
+    const server = app.listen(port, () => {
+      logger.info('Worker server started', { workerId, port });
+      resolve(server);
+    });
+
+    server.on('error', (err: Error) => {
+      logger.error('Worker server failed to start', { workerId, port, error: err.message });
+      reject(err);
+    });
+  });
+}
+
+function percentile(sortedArray: number[], p: number): number {
+  if (sortedArray.length === 0) return 0;
+  const index = Math.ceil(sortedArray.length * p) - 1;
+  return sortedArray[Math.max(0, index)];
+}
+
+export { startWorkerServer, createWorkerApp };
