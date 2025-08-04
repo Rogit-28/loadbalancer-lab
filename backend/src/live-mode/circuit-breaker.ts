@@ -69,3 +69,72 @@ class CircuitBreaker {
   recordFailure(): void {
     this.failureCount++;
     this.lastFailureTime = Date.now();
+
+    if (this.state === 'half-open') {
+      // Any failure in half-open trips back to open
+      logger.warn('Failure in half-open state, tripping to open', {
+        workerId: this.workerId,
+      });
+      this.transitionTo('open');
+      return;
+    }
+
+    if (this.state === 'closed' && this.failureCount >= this.failureThreshold) {
+      logger.warn('Failure threshold exceeded, tripping circuit', {
+        workerId: this.workerId,
+        failureCount: String(this.failureCount),
+        threshold: String(this.failureThreshold),
+      });
+      this.transitionTo('open');
+    }
+  }
+
+  getState(): CircuitBreakerState {
+    return {
+      workerId: this.workerId,
+      state: this.state,
+      failureCount: this.failureCount,
+      successCount: this.successCount,
+      lastFailureTime: this.lastFailureTime,
+      lastStateChange: this.lastStateChange,
+      nextRetryTime: this.nextRetryTime,
+    };
+  }
+
+  reset(): void {
+    logger.info('Circuit breaker reset', { workerId: this.workerId });
+    this.transitionTo('closed');
+  }
+
+  private transitionTo(newState: CircuitState): void {
+    const oldState = this.state;
+    this.state = newState;
+    this.lastStateChange = Date.now();
+
+    if (newState === 'closed') {
+      this.failureCount = 0;
+      this.successCount = 0;
+      this.nextRetryTime = null;
+      logger.info('Circuit closed', { workerId: this.workerId });
+    } else if (newState === 'open') {
+      this.successCount = 0;
+      this.nextRetryTime = Date.now() + this.resetTimeout;
+      logger.warn('Circuit opened', {
+        workerId: this.workerId,
+        nextRetryTime: String(this.nextRetryTime),
+      });
+    } else if (newState === 'half-open') {
+      this.successCount = 0;
+      this.nextRetryTime = null;
+      logger.info('Circuit half-open', { workerId: this.workerId });
+    }
+
+    logger.debug('State transition', {
+      workerId: this.workerId,
+      from: oldState,
+      to: newState,
+    });
+  }
+}
+
+export { CircuitBreaker };
