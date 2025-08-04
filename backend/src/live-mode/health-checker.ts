@@ -87,3 +87,92 @@ class HealthChecker extends EventEmitter {
             const responseTime = Date.now() - startTime;
             const statusCode = res.statusCode ?? 0;
             let status: HealthStatus = 'unknown';
+
+            if (statusCode >= 200 && statusCode < 300) {
+              status = responseTime > 2000 ? 'degraded' : 'healthy';
+            } else {
+              status = 'unhealthy';
+            }
+
+            resolve({
+              workerId: worker.id,
+              status,
+              responseTime,
+              timestamp: Date.now(),
+              statusCode,
+            });
+          });
+        },
+      );
+
+      req.on('error', (err: Error) => {
+        const responseTime = Date.now() - startTime;
+        resolve({
+          workerId: worker.id,
+          status: 'unhealthy',
+          responseTime,
+          timestamp: Date.now(),
+          statusCode: null,
+          error: err.message,
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        const responseTime = Date.now() - startTime;
+        resolve({
+          workerId: worker.id,
+          status: 'unhealthy',
+          responseTime,
+          timestamp: Date.now(),
+          statusCode: null,
+          error: 'Health check timed out',
+        });
+      });
+    });
+  }
+
+  private async runChecks(): Promise<void> {
+    const runningWorkers = this.workers.filter((w) => w.status === 'running');
+    if (runningWorkers.length === 0) return;
+
+    const results = await Promise.all(
+      runningWorkers.map((worker) => this.checkWorker(worker)),
+    );
+
+    for (const result of results) {
+      this.healthMap.set(result.workerId, result);
+
+      const wasUnhealthy = this.unhealthySet.has(result.workerId);
+      const currentStreak = this.failureStreaks.get(result.workerId) ?? 0;
+
+      if (result.status === 'healthy' || result.status === 'degraded') {
+        // Reset failure streak on success
+        this.failureStreaks.set(result.workerId, 0);
+
+        if (wasUnhealthy) {
+          this.unhealthySet.delete(result.workerId);
+          logger.info('Worker recovered', { workerId: result.workerId });
+          this.emit('worker-recovered', result);
+        }
+      } else {
+        // Increment failure streak
+        const newStreak = currentStreak + 1;
+        this.failureStreaks.set(result.workerId, newStreak);
+
+        if (newStreak >= UNHEALTHY_THRESHOLD && !wasUnhealthy) {
+          this.unhealthySet.add(result.workerId);
+          logger.warn('Worker unhealthy', {
+            workerId: result.workerId,
+            consecutiveFailures: newStreak,
+          });
+          this.emit('worker-unhealthy', result);
+        }
+      }
+    }
+
+    this.emit('health-update', results);
+  }
+}
+
+export { HealthChecker };
