@@ -65,3 +65,69 @@ class MetricsCollector {
       const workerRequests = this.requests.filter(
         (r) => r.targetWorkerId === worker.id
       );
+      const workerCompleted = workerRequests.filter(
+        (r) => r.endTime !== null && r.responseTime !== null
+      );
+      const workerResponseTimes = workerCompleted
+        .map((r) => r.responseTime)
+        .filter((t): t is number => t !== null);
+
+      const workerAvgResponseTime =
+        workerResponseTimes.length > 0
+          ? workerResponseTimes.reduce((sum, t) => sum + t, 0) /
+            workerResponseTimes.length
+          : 0;
+
+      const workerActiveConnections = workerRequests.filter(
+        (r) => r.endTime === null
+      ).length;
+
+      const health = healthMap.get(worker.id) || 'unknown';
+      const breaker = circuitBreakers.get(worker.id);
+      const circuitState: CircuitState = breaker
+        ? breaker.getState().state
+        : 'closed';
+
+      workerMetrics[worker.id] = {
+        status: worker.status,
+        health,
+        circuitState,
+        requestCount: workerRequests.length,
+        errorCount: workerRequests.filter((r) => !r.success).length,
+        avgResponseTime: Math.round(workerAvgResponseTime * 100) / 100,
+        activeConnections: workerActiveConnections,
+      };
+    }
+
+    return {
+      timestamp: now,
+      proxyPort: this.proxyPort,
+      totalProxiedRequests: totalRequests,
+      totalProxiedErrors: totalErrors,
+      avgProxyResponseTime:
+        Math.round(avgResponseTime * 100) / 100,
+      p50ResponseTime: this.calculatePercentile(sortedTimes, 0.5),
+      p95ResponseTime: this.calculatePercentile(sortedTimes, 0.95),
+      p99ResponseTime: this.calculatePercentile(sortedTimes, 0.99),
+      activeConnections,
+      throughput,
+      workers: workerMetrics,
+    };
+  }
+
+  reset(): void {
+    this.requests = [];
+    logger.info('Metrics collector reset');
+  }
+
+  private calculatePercentile(
+    sortedArray: number[],
+    percentile: number
+  ): number {
+    if (sortedArray.length === 0) return 0;
+    const index = Math.ceil(sortedArray.length * percentile) - 1;
+    return sortedArray[Math.max(0, index)];
+  }
+}
+
+export { MetricsCollector };
