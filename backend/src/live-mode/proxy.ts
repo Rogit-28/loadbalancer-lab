@@ -204,3 +204,103 @@ class LoadBalancerProxy extends EventEmitter {
       } else {
         breaker?.recordFailure();
       }
+
+      const proxyRequest: ProxyRequest = {
+        id: requestId,
+        method: clientReq.method || 'GET',
+        url: clientReq.url || '/',
+        clientIp,
+        targetWorkerId: target.id,
+        targetHost: target.host,
+        targetPort: target.port,
+        startTime,
+        endTime,
+        responseTime,
+        statusCode,
+        success,
+      };
+      this.emit('request-completed', proxyRequest);
+
+      // Forward the response headers and body
+      const responseHeaders: Record<string, string | string[]> = {};
+      for (const [key, value] of Object.entries(proxyRes.headers)) {
+        if (value !== undefined) {
+          responseHeaders[key] = value;
+        }
+      }
+      clientRes.writeHead(statusCode, responseHeaders);
+      proxyRes.pipe(clientRes);
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
+
+      breaker?.recordFailure();
+
+      const proxyRequest: ProxyRequest = {
+        id: requestId,
+        method: clientReq.method || 'GET',
+        url: clientReq.url || '/',
+        clientIp,
+        targetWorkerId: target.id,
+        targetHost: target.host,
+        targetPort: target.port,
+        startTime,
+        endTime,
+        responseTime,
+        statusCode: 504,
+        success: false,
+        error: 'Connection timeout',
+      };
+      this.emit('request-completed', proxyRequest);
+
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(504, { 'Content-Type': 'application/json' });
+        clientRes.end(JSON.stringify({ error: 'Gateway timeout' }));
+      }
+    });
+
+    proxyReq.on('error', (err: Error) => {
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
+
+      breaker?.recordFailure();
+
+      logger.error('Proxy request error', {
+        requestId,
+        target: `${target.host}:${target.port}`,
+        error: err.message,
+      });
+
+      const proxyRequest: ProxyRequest = {
+        id: requestId,
+        method: clientReq.method || 'GET',
+        url: clientReq.url || '/',
+        clientIp,
+        targetWorkerId: target.id,
+        targetHost: target.host,
+        targetPort: target.port,
+        startTime,
+        endTime,
+        responseTime,
+        statusCode: 502,
+        success: false,
+        error: err.message,
+      };
+      this.emit('request-completed', proxyRequest);
+      this.emit('proxy-error', err);
+
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(502, { 'Content-Type': 'application/json' });
+        clientRes.end(JSON.stringify({ error: 'Bad gateway' }));
+      }
+    });
+
+    // Pipe the client request body to the proxy request
+    clientReq.pipe(proxyReq);
+  }
+}
+
+export { LoadBalancerProxy };
