@@ -102,3 +102,105 @@ class LoadBalancerProxy extends EventEmitter {
       (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
       req.socket.remoteAddress ||
       '0.0.0.0';
+
+    if (!this.algorithm) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No algorithm configured' }));
+      return;
+    }
+
+    const targetServer = this.algorithm.getNextServer(clientIp);
+
+    if (!targetServer) {
+      const proxyRequest: ProxyRequest = {
+        id: requestId,
+        method: req.method || 'GET',
+        url: req.url || '/',
+        clientIp,
+        targetWorkerId: '',
+        targetHost: '',
+        targetPort: 0,
+        startTime,
+        endTime: Date.now(),
+        responseTime: Date.now() - startTime,
+        statusCode: 503,
+        success: false,
+        error: 'No healthy servers available',
+      };
+      this.emit('request-completed', proxyRequest);
+
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No healthy servers available' }));
+      return;
+    }
+
+    // Check circuit breaker
+    const breaker = this.circuitBreakers.get(targetServer.id);
+    if (breaker && !breaker.canRequest()) {
+      const proxyRequest: ProxyRequest = {
+        id: requestId,
+        method: req.method || 'GET',
+        url: req.url || '/',
+        clientIp,
+        targetWorkerId: targetServer.id,
+        targetHost: targetServer.host,
+        targetPort: targetServer.port,
+        startTime,
+        endTime: Date.now(),
+        responseTime: Date.now() - startTime,
+        statusCode: 503,
+        success: false,
+        error: 'Circuit breaker open',
+      };
+      this.emit('request-completed', proxyRequest);
+
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Service temporarily unavailable' }));
+      return;
+    }
+
+    this.forwardRequest(
+      req,
+      res,
+      targetServer,
+      requestId,
+      clientIp,
+      startTime,
+      breaker
+    );
+  }
+
+  private forwardRequest(
+    clientReq: http.IncomingMessage,
+    clientRes: http.ServerResponse,
+    target: Server,
+    requestId: string,
+    clientIp: string,
+    startTime: number,
+    breaker: CircuitBreaker | undefined
+  ): void {
+    const options: http.RequestOptions = {
+      hostname: target.host,
+      port: target.port,
+      path: clientReq.url || '/',
+      method: clientReq.method || 'GET',
+      headers: {
+        ...clientReq.headers,
+        host: `${target.host}:${target.port}`,
+        'x-forwarded-for': clientIp,
+        'x-request-id': requestId,
+      },
+      timeout: CONNECTION_TIMEOUT,
+    };
+
+    const proxyReq = http.request(options, (proxyRes: http.IncomingMessage) => {
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
+      const statusCode = proxyRes.statusCode || 500;
+      const success = statusCode >= 200 && statusCode < 500;
+
+      if (success) {
+        breaker?.recordSuccess();
+      } else {
+        breaker?.recordFailure();
+      }
