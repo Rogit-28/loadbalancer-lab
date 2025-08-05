@@ -244,3 +244,122 @@ class LiveOrchestrator extends EventEmitter {
       },
       createdAt: worker.startedAt || Date.now(),
     };
+  }
+
+  private refreshAlgorithmServers(): void {
+    const servers = this.buildServerList();
+    if (this.algorithm) {
+      this.algorithm.updateServers(servers);
+    }
+    this.proxy.updateServers(servers);
+  }
+
+  private startHealthChecking(): void {
+    this.healthInterval = setInterval(() => {
+      this.runHealthChecks();
+    }, this.liveConfig.healthCheckInterval);
+    // Run an initial health check immediately
+    this.runHealthChecks();
+  }
+
+  private stopHealthChecking(): void {
+    if (this.healthInterval) {
+      clearInterval(this.healthInterval);
+      this.healthInterval = null;
+    }
+  }
+
+  private runHealthChecks(): void {
+    const workers = this.processManager.getWorkers();
+    for (const worker of workers) {
+      if (worker.status !== 'running') continue;
+      this.checkWorkerHealth(worker);
+    }
+  }
+
+  private checkWorkerHealth(worker: WorkerProcess): void {
+    const startTime = Date.now();
+    const req = http.get(
+      {
+        hostname: worker.host,
+        port: worker.port,
+        path: '/health',
+        timeout: 3000,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => {
+          data += chunk.toString();
+        });
+        res.on('end', () => {
+          const responseTime = Date.now() - startTime;
+          const statusCode = res.statusCode || 0;
+          let status: HealthStatus = 'unhealthy';
+
+          if (statusCode >= 200 && statusCode < 300) {
+            status = 'healthy';
+          } else if (statusCode >= 300 && statusCode < 500) {
+            status = 'degraded';
+          }
+
+          const result: HealthCheckResult = {
+            workerId: worker.id,
+            status,
+            responseTime,
+            timestamp: Date.now(),
+            statusCode,
+          };
+
+          const previousHealth = this.healthMap.get(worker.id);
+          this.healthMap.set(worker.id, status);
+
+          if (previousHealth !== status) {
+            this.refreshAlgorithmServers();
+            this.emit('health-update', result);
+          }
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy();
+      const result: HealthCheckResult = {
+        workerId: worker.id,
+        status: 'unhealthy',
+        responseTime: Date.now() - startTime,
+        timestamp: Date.now(),
+        statusCode: null,
+        error: 'Health check timeout',
+      };
+
+      const previousHealth = this.healthMap.get(worker.id);
+      this.healthMap.set(worker.id, 'unhealthy');
+
+      if (previousHealth !== 'unhealthy') {
+        this.refreshAlgorithmServers();
+        this.emit('health-update', result);
+      }
+    });
+
+    req.on('error', (err: Error) => {
+      const result: HealthCheckResult = {
+        workerId: worker.id,
+        status: 'unhealthy',
+        responseTime: Date.now() - startTime,
+        timestamp: Date.now(),
+        statusCode: null,
+        error: err.message,
+      };
+
+      const previousHealth = this.healthMap.get(worker.id);
+      this.healthMap.set(worker.id, 'unhealthy');
+
+      if (previousHealth !== 'unhealthy') {
+        this.refreshAlgorithmServers();
+        this.emit('health-update', result);
+      }
+    });
+  }
+}
+
+export { LiveOrchestrator };
