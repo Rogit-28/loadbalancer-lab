@@ -118,3 +118,129 @@ class LiveOrchestrator extends EventEmitter {
 
     // Kill all workers
     await this.processManager.killAll();
+
+    // Clean up
+    this.circuitBreakers.clear();
+    this.healthMap.clear();
+    this.metricsCollector.reset();
+    this.algorithm = null;
+    this.active = false;
+
+    logger.info('Live mode stopped');
+  }
+
+  getMetrics(): LiveMetrics {
+    return this.metricsCollector.getMetrics(
+      this.processManager.getWorkers(),
+      this.healthMap,
+      this.circuitBreakers
+    );
+  }
+
+  isActive(): boolean {
+    return this.active;
+  }
+
+  async addWorker(
+    name: string,
+    weight?: number,
+    capacity?: number
+  ): Promise<WorkerProcess> {
+    const workers = this.processManager.getWorkers();
+    if (workers.length >= config.worker.maxWorkers) {
+      throw new Error(
+        `Maximum number of workers (${config.worker.maxWorkers}) reached`
+      );
+    }
+
+    // Find the next available port
+    const usedPorts = new Set(workers.map((w) => w.port));
+    let port = this.liveConfig.workerBasePort;
+    while (usedPorts.has(port)) {
+      port++;
+    }
+
+    const worker = await this.processManager.spawnWorker(
+      port,
+      name,
+      weight,
+      capacity
+    );
+    this.createCircuitBreaker(worker.id);
+    this.healthMap.set(worker.id, 'unknown');
+
+    // Update algorithm servers
+    this.refreshAlgorithmServers();
+
+    this.emit('worker-added', worker);
+    logger.info('Worker added', { id: worker.id, name, port });
+    return worker;
+  }
+
+  async removeWorker(workerId: string): Promise<void> {
+    await this.processManager.killWorker(workerId);
+    this.circuitBreakers.delete(workerId);
+    this.healthMap.delete(workerId);
+
+    // Update algorithm servers
+    this.refreshAlgorithmServers();
+
+    this.emit('worker-removed', { workerId });
+    logger.info('Worker removed', { workerId });
+  }
+
+  getWorkers(): WorkerProcess[] {
+    return this.processManager.getWorkers();
+  }
+
+  updateAlgorithm(algorithmType: string): void {
+    this.algorithmType = algorithmType;
+    const servers = this.buildServerList();
+    this.algorithm = createLoadBalancer(algorithmType, servers, {
+      algorithm: algorithmType as 'round-robin',
+      servers,
+      traffic: { rate: 0, pattern: 'steady', speed: 1 },
+    });
+    this.proxy.updateAlgorithm(this.algorithm);
+    logger.info('Algorithm updated', { algorithm: algorithmType });
+  }
+
+  getCircuitBreakers(): CircuitBreakerState[] {
+    return Array.from(this.circuitBreakers.values()).map((cb) => cb.getState());
+  }
+
+  private createCircuitBreaker(workerId: string): void {
+    const breaker = new CircuitBreaker(workerId, this.liveConfig.circuitBreaker);
+    this.circuitBreakers.set(workerId, breaker);
+  }
+
+  private buildServerList(): Server[] {
+    const workers = this.processManager.getWorkers();
+    return workers.map((worker) => {
+      const health = this.healthMap.get(worker.id) || 'unknown';
+      const isHealthy = health === 'healthy' || health === 'unknown';
+      return this.workerToServer(worker, isHealthy);
+    });
+  }
+
+  private workerToServer(worker: WorkerProcess, isHealthy: boolean): Server {
+    return {
+      id: worker.id,
+      name: worker.name,
+      host: worker.host,
+      port: worker.port,
+      weight: worker.weight,
+      capacity: worker.capacity,
+      isHealthy,
+      metrics: {
+        requestCount: 0,
+        totalResponseTime: 0,
+        errorCount: 0,
+        activeConnections: 0,
+        cpuUtilization: 0,
+        memoryUtilization: 0,
+        responseTimes: [],
+        requestsThisInterval: 0,
+      },
+      createdAt: worker.startedAt || Date.now(),
+    };
