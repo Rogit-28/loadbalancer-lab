@@ -18,3 +18,23 @@ function start() {
 
   server.start(PORT);
   console.log(`LoadBalancerSim server started on port ${PORT}`);
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    console.log('\nShutting down gracefully...');
+    if (orchestrator.isActive()) {
+      await orchestrator.stop();
+    }
+    server.stop();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => { shutdown(); });
+  process.on('SIGINT', () => { shutdown(); });
+}
+
+if (require.main === module) {
+  start();
+}
+
+export { start, WebSocketServer };
