@@ -468,3 +468,68 @@ class WebSocketServer {
       });
     });
   }
+
+  private startMetricsBroadcast(): void {
+    this.metricsInterval = setInterval(() => {
+      const metrics = this.simulator.getMetrics();
+      this.io.emit('metrics-update', metrics);
+    }, 1000);
+  }
+
+  private emitConfigUpdate(): void {
+    this.io.emit('config-update', {
+      algorithm: this.simulator.getStatus().algorithm,
+      servers: this.simulator.getServers(),
+      traffic: this.simulator.getStatus(),
+      metrics: this.simulator.getMetrics()
+    });
+  }
+
+  private getModeStatus(): { currentMode: SystemMode; isRunning: boolean; canSwitch: boolean } {
+    const simRunning = this.simulator.getStatus().isRunning;
+    const liveRunning = this.orchestrator?.isActive() || false;
+    const isRunning = simRunning || liveRunning;
+    return {
+      currentMode: this.currentMode,
+      isRunning,
+      canSwitch: !isRunning,
+    };
+  }
+
+  start(port: number = 3001): void {
+    this.httpServer.listen(port, () => {
+      console.log(`WebSocket server listening on port ${port}`);
+    });
+  }
+
+  stop(): void {
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+      this.metricsInterval = null;
+    }
+
+    if (this.requestLogInterval) {
+      clearInterval(this.requestLogInterval);
+      this.requestLogInterval = null;
+    }
+
+    if (this.liveMetricsInterval) {
+      clearInterval(this.liveMetricsInterval);
+      this.liveMetricsInterval = null;
+    }
+
+    if (this.liveRequestLogInterval) {
+      clearInterval(this.liveRequestLogInterval);
+      this.liveRequestLogInterval = null;
+    }
+
+    this.simulator.removeAllListeners();
+    if (this.orchestrator) {
+      this.orchestrator.removeAllListeners();
+    }
+    this.io.close();
+    this.httpServer.close();
+  }
+}
+
+export { WebSocketServer };
