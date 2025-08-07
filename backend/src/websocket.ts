@@ -398,3 +398,73 @@ class WebSocketServer {
             socket.emit('error', { message: 'Worker name is required' });
             return;
           }
+          const worker = await this.orchestrator.addWorker(
+            data.name,
+            typeof data.weight === 'number' ? data.weight : undefined,
+            typeof data.capacity === 'number' ? data.capacity : undefined
+          );
+          this.io.emit('live-workers-update', {
+            workers: this.orchestrator.getWorkers(),
+          });
+          socket.emit('live-worker-added', worker);
+        } catch (err) {
+          console.error('Error handling live-add-worker:', err);
+          socket.emit('error', { message: 'Failed to add worker' });
+        }
+      });
+
+      socket.on('live-remove-worker', async (data: { workerId: string }) => {
+        try {
+          if (!this.orchestrator) {
+            socket.emit('error', { message: 'Live mode is not available' });
+            return;
+          }
+          if (!data?.workerId || typeof data.workerId !== 'string') {
+            socket.emit('error', { message: 'Invalid workerId' });
+            return;
+          }
+          await this.orchestrator.removeWorker(data.workerId);
+          this.io.emit('live-workers-update', {
+            workers: this.orchestrator.getWorkers(),
+          });
+        } catch (err) {
+          console.error('Error handling live-remove-worker:', err);
+          socket.emit('error', { message: 'Failed to remove worker' });
+        }
+      });
+
+      socket.on('live-update-algorithm', (data: { algorithm: string }) => {
+        try {
+          if (!this.orchestrator) {
+            socket.emit('error', { message: 'Live mode is not available' });
+            return;
+          }
+          if (!data?.algorithm || !VALID_ALGORITHMS.includes(data.algorithm as ValidAlgorithm)) {
+            socket.emit('error', {
+              message: `Invalid algorithm: ${data?.algorithm}. Must be one of: ${VALID_ALGORITHMS.join(', ')}`,
+            });
+            return;
+          }
+          this.orchestrator.updateAlgorithm(data.algorithm);
+        } catch (err) {
+          console.error('Error handling live-update-algorithm:', err);
+          socket.emit('error', { message: 'Failed to update algorithm' });
+        }
+      });
+
+      // ─── Send initial state on connection ─────────────────────────
+
+      socket.emit('config-update', {
+        algorithm: this.simulator.getStatus().algorithm,
+        servers: this.simulator.getServers(),
+        traffic: this.simulator.getStatus(),
+        metrics: this.simulator.getMetrics()
+      });
+
+      socket.emit('mode-update', this.getModeStatus());
+
+      socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+      });
+    });
+  }
