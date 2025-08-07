@@ -330,3 +330,71 @@ class WebSocketServer {
             socket.emit('error', { message: 'Live mode is not available' });
             return;
           }
+
+          // Prevent switching while something is running
+          const simRunning = this.simulator.getStatus().isRunning;
+          const liveRunning = this.orchestrator?.isActive() || false;
+          if (simRunning || liveRunning) {
+            socket.emit('error', { message: 'Cannot switch modes while running. Stop current mode first.' });
+            return;
+          }
+
+          this.currentMode = data.mode;
+          this.io.emit('mode-update', this.getModeStatus());
+        } catch (err) {
+          console.error('Error handling switch-mode:', err);
+          socket.emit('error', { message: 'Failed to switch mode' });
+        }
+      });
+
+      // ─── Live mode events ─────────────────────────────────────────
+
+      socket.on('live-start', async () => {
+        try {
+          if (!this.orchestrator) {
+            socket.emit('error', { message: 'Live mode is not available' });
+            return;
+          }
+          if (this.orchestrator.isActive()) {
+            socket.emit('error', { message: 'Live mode is already running' });
+            return;
+          }
+          await this.orchestrator.start();
+          this.io.emit('mode-update', this.getModeStatus());
+          this.io.emit('live-workers-update', {
+            workers: this.orchestrator.getWorkers(),
+          });
+        } catch (err) {
+          console.error('Error handling live-start:', err);
+          socket.emit('error', { message: 'Failed to start live mode' });
+        }
+      });
+
+      socket.on('live-stop', async () => {
+        try {
+          if (!this.orchestrator) {
+            socket.emit('error', { message: 'Live mode is not available' });
+            return;
+          }
+          if (!this.orchestrator.isActive()) {
+            socket.emit('error', { message: 'Live mode is not running' });
+            return;
+          }
+          await this.orchestrator.stop();
+          this.io.emit('mode-update', this.getModeStatus());
+        } catch (err) {
+          console.error('Error handling live-stop:', err);
+          socket.emit('error', { message: 'Failed to stop live mode' });
+        }
+      });
+
+      socket.on('live-add-worker', async (data: { name: string; weight?: number; capacity?: number }) => {
+        try {
+          if (!this.orchestrator) {
+            socket.emit('error', { message: 'Live mode is not available' });
+            return;
+          }
+          if (!data?.name || typeof data.name !== 'string') {
+            socket.emit('error', { message: 'Worker name is required' });
+            return;
+          }
