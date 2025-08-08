@@ -82,3 +82,90 @@ function App() {
       </header>
 
       <ModeToggle />
+
+      {currentMode === 'simulation' ? (
+        // Simulation mode layout
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-6">
+            <div className="xl:col-span-2">
+              <AlgorithmSelector />
+            </div>
+            <div className="xl:col-span-2">
+              <TrafficControls />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+            <div className="xl:col-span-2">
+              <ServerList />
+            </div>
+            <div>
+              <SimulationStatus />
+            </div>
+          </div>
+
+          <MetricsCards />
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <RealTimeChart type="responseTime" title="Response Time Distribution" />
+            <RealTimeChart type="requestRate" title="Request Rate (req/s)" />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <ServerDistribution />
+            <div className="xl:col-span-1">
+              <RequestLog />
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <AlgorithmComparison />
+          </div>
+        </>
+      ) : (
+        // Live mode layout
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+            <div className="xl:col-span-2">
+              <WorkerManagement />
+            </div>
+            <div>
+              <LiveModeStatus />
+            </div>
+          </div>
+
+          <MetricsCards />
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <RealTimeChart type="responseTime" title="Response Time Distribution" />
+            <RealTimeChart type="requestRate" title="Request Rate (req/s)" />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <ServerDistribution />
+            <div className="xl:col-span-1">
+              <RequestLog />
+            </div>
+          </div>
+        </>
+      )}
+
+      <footer className="mt-12 pt-6 border-t border-border-light">
+        <div className="flex items-center justify-between text-xs text-text-dim">
+          <div>LoadBalancerLab v2.0.0 - Educational Load Balancing (Simulation & Live Proxy)</div>
+          <div className="flex space-x-4">
+            <span>React + TypeScript</span>
+            <span>|</span>
+            <span>Node.js + Socket.IO</span>
+            <span>|</span>
+            <span>TailwindCSS</span>
+            <span>|</span>
+            <span>Recharts</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+export default App;
