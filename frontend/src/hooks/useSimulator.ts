@@ -133,3 +133,145 @@ const useSimulatorStore = create<SimulatorState & SimulatorActions>((set, get) =
   requestLog: [],
   comparisonResult: null,
   comparisonLoading: false,
+
+  connect: (url = BACKEND_URL) => {
+    if (get().socket) return;
+    const socket = io(url, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000
+    });
+
+    set({ status: 'connecting' });
+
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      set({ status: 'connected' });
+      socket.emit('get-config');
+      socket.emit('get-mode');
+      // Setup live mode listeners
+      useLiveMode.getState().setupLiveModeListeners(socket);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      set({ status: 'disconnected' });
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      set({ status: 'error' });
+    });
+
+    socket.on('config-update', (data: any) => {
+      set({
+        algorithm: data.algorithm || 'round-robin',
+        servers: data.servers || [],
+        traffic: { ...get().traffic, ...data.traffic }
+      });
+    });
+
+    socket.on('metrics-update', (data: Metrics) => {
+      set({ metrics: data });
+    });
+
+    socket.on('request-log', (batch: RequestLogEntry[]) => {
+      set(state => {
+        const updated = [...state.requestLog, ...batch];
+        // Keep last 50 entries in the frontend
+        return { requestLog: updated.slice(-50) };
+      });
+    });
+
+    socket.on('error', (data: { message: string }) => {
+      console.error('Server error:', data.message);
+    });
+
+    socket.on('comparison-result', (data: ComparisonResponse) => {
+      set({ comparisonResult: data, comparisonLoading: false });
+    });
+
+    set({ socket });
+  },
+
+  disconnect: () => {
+    const { socket } = get();
+    if (socket) {
+      useLiveMode.getState().removeLiveModeListeners(socket);
+      socket.removeAllListeners();
+      socket.disconnect();
+      set({ socket: null, status: 'disconnected' });
+    }
+  },
+
+  updateAlgorithm: (algorithm) => {
+    const { socket } = get();
+    socket?.emit('update-algorithm', { algorithm });
+  },
+
+  updateTraffic: (config) => {
+    const { socket, traffic } = get();
+    const updated = { ...traffic, ...config };
+    set({ traffic: updated });
+    socket?.emit('update-traffic', updated);
+  },
+
+  addServer: (name, weight = 1, capacity = 100) => {
+    const { socket } = get();
+    socket?.emit('add-server', { name, weight, capacity });
+  },
+
+  removeServer: (serverId) => {
+    const { socket } = get();
+    socket?.emit('remove-server', { serverId });
+  },
+
+  updateServer: (serverId, updates) => {
+    const { socket } = get();
+    socket?.emit('update-server', { serverId, ...updates });
+  },
+
+  toggleServerHealth: (serverId) => {
+    const { socket } = get();
+    socket?.emit('toggle-health', { serverId });
+  },
+
+  runComparison: (algorithms, requestCount = 500) => {
+    const { socket } = get();
+    if (!socket) return;
+    set({ comparisonLoading: true, comparisonResult: null });
+    socket.emit('run-comparison', { algorithms, requestCount });
+  },
+
+  start: () => {
+    const { socket, traffic } = get();
+    const updated = { ...traffic, isRunning: true };
+    set({ traffic: updated, requestLog: [] });
+    socket?.emit('start-simulation');
+  },
+
+  stop: () => {
+    const { socket, traffic } = get();
+    const updated = { ...traffic, isRunning: false };
+    set({ traffic: updated });
+    socket?.emit('stop-simulation');
+  }
+}));
+
+export const useSimulator = useSimulatorStore;
+
+export const useSimulatorData = () => {
+  return useSimulatorStore(
+    useShallow((state) => ({
+      status: state.status,
+      algorithm: state.algorithm,
+      servers: state.servers,
+      traffic: state.traffic,
+      metrics: state.metrics,
+      requestLog: state.requestLog,
+      comparisonResult: state.comparisonResult,
+      comparisonLoading: state.comparisonLoading,
+    }))
+  );
+};
